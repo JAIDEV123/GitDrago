@@ -30,6 +30,9 @@ def main(argv=sys.argv[1:]):
     elif args.command == "show-ref"    : cmd_show_ref(args)
     elif args.command == "tag"         : cmd_tag(args)
 
+def cmd_init(args):
+    repo_create(args.path)
+
 class GitRepository(object):
     """A git repository"""
 
@@ -140,5 +143,20 @@ argsp.add_argument("path",
                    default=".",
                    help="Where to create the repository.")
 
-def cmd_init(args):
-    repo_create(args.path)
+def repo_find(path=".", required=True):
+    path = os.path.realpath(path)
+
+    if os.path.isdir(os.path.join(path, ".git")):
+        return GitRepository(path)
+
+    parent = os.path.realpath(os.path.join(path, ".."))
+
+    if parent == path :
+        if required:
+            raise Exception("No git directory")
+        else:
+            return None
+
+    return repo_find(parent, required)
+
+
