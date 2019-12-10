@@ -159,4 +159,94 @@ def repo_find(path=".", required=True):
 
     return repo_find(parent, required)
 
+class GitObject (object):
+
+    repo = None
+
+    def __init__(self, repo, data=None):
+        self.repo=repo
+
+        if data != None:
+            self.deserialize(data)
+
+    def serialize(self):
+        raise Exception("Unimplemented!")
+
+    def deserialize(self, data):
+        raise Exception("Unimplemented!")
+
+class GitBlob(GitObject):
+    fmt=b'blob'
+
+    def serialize(self):
+        return self.blobdata
+
+    def deserialize(self, data):
+        self.blobdata = data
+
+
+
+def object_read(repo, sha):
+    'Search for the object by checking for directory with first two characters followed by remaining
+    chars'
+    path = repo_file(repo, "objects", sha[0:2], sha[2:])
+
+    with open (path, "rb") as f:
+        raw = zlib.decompress(f.read())
+
+
+        # Read object type. The find function returns the index. fmt will contain the string b'blob
+        # for example and contains the type info
+        x = raw.find(b' ')
+        fmt = raw[0:x]
+
+        # Read and validate object size
+        y = raw.find(b'\x00', x)
+        size = int(raw[x:y].decode("ascii"))
+        if size != len(raw)-y-1:
+            raise Exception("Malformed object {0}: bad length".format(sha))
+
+        # Pick constructor
+        if   fmt==b'commit' : c=GitCommit
+        elif fmt==b'tree'   : c=GitTree
+        elif fmt==b'tag'    : c=GitTag
+        elif fmt==b'blob'   : c=GitBlob
+        else:
+            raise Exception("Unknown type %s for object %s".format(fmt.decode("ascii"), sha))
+
+        # Call constructor and return object
+        return c(repo, raw[y+1:])
+
+def object_find(repo, name, fmt=None, follow=True):
+    return name
+
+def object_write(obj, actually_write=True):
+    # Serialize object data
+    data = obj.serialize()
+    # Add header
+    result = obj.fmt + b' ' + str(len(data)).encode() + b'\x00' + data
+    # Compute hash
+    sha = hashlib.sha1(result).hexdigest()
+
+    if actually_write:
+        # Compute path
+        path=repo_file(obj.repo, "objects", sha[0:2], sha[2:], mkdir=actually_write)
+
+        with open(path, 'wb') as f:
+            # Compress and write
+            f.write(zlib.compress(result))
+
+    return sha
+
+argsp = argsubparsers.add_parser("cat-file",
+                                 help="Provide content of repository objects")
+
+argsp.add_argument("type",
+                   metavar="type",
+                   choices=["blob", "commit", "tag", "tree"],
+                   help="Specify the type")
+
+argsp.add_argument("object",
+                   metavar="object",
+                   help="The object to display")
 
