@@ -321,6 +321,7 @@ def kvlm_serialize(kvlm):
         if type(val) != list:
             val = [ val ]
 
+    # There is no PGP signature
         for v in val:
             ret += k + b' ' + (v.replace(b'\n', b'\n ')) + b'\n'
 
