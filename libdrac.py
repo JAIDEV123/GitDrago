@@ -376,6 +376,7 @@ def tree_parse(raw):
         ret.append(data)
 
     return ret
+
 def tree_serialize(obj):
     ret = b''
     for i in obj.items:
@@ -387,18 +388,46 @@ def tree_serialize(obj):
         ret += sha.to_bytes(20, byteorder="big")
     return ret
 
-argsp = argsubparsers.add_parser("ls-tree", help="Pretty-print a tree object.")
-argsp.add_argument("object", help="The object to show.")
 
-def cmd_ls_tree(args):
+def ref_resolve(repo, ref):
+    with open(repo_file(repo, ref), 'r') as fp:
+        data = fp.read()[:-1]
+        # Drop final \n ^^^^^
+    if data.startswith("ref: "):
+        return ref_resolve(repo, data[5:])
+    else:
+        return data
+
+
+def ref_list(repo, path=None):
+    if not path:
+        path = repo_dir(repo, "refs")
+    ret = collections.OrderedDict()
+    # Git shows refs sorted.  To do the same, we use
+    # an OrderedDict and sort the output of listdir
+    for f in sorted(os.listdir(path)):
+        can = os.path.join(path, f)
+        if os.path.isdir(can):
+            ret[f] = ref_list(repo, can)
+        else:
+            ret[f] = ref_resolve(repo, can)
+
+    return ret
+argsp = argsubparsers.add_parser("show-ref", help="List references.")
+
+def cmd_show_ref(args):
     repo = repo_find()
-    obj = object_read(repo, object_find(repo, args.object, fmt=b'tree'))
+    refs = ref_list(repo)
+    show_ref(repo, refs, prefix="refs")
 
-    for item in obj.items:
-        print("{0} {1} {2}\t{3}".format("0" * (6 - len(item.mode)) + item.mode.decode("ascii"),
-            # Git's ls-tree displays the type
-            # of the object pointed to.  We can do that too :)
-            object_read(repo, item.sha).fmt.decode("ascii"),
-            item.sha,
-            item.path.decode("ascii")))
+def show_ref(repo, refs, with_hash=True, prefix=""):
+    for k, v in refs.items():
+        if type(v) == str:
+            print ("{0}{1}{2}".format(
+                v + " " if with_hash else "",
+                prefix + "/" if prefix else "",
+                k))
+        else:
+            show_ref(repo, v, with_hash=with_hash, prefix="{0}{1}{2}".format(prefix, "/" if prefix else "", k))
+
 
